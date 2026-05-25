@@ -146,6 +146,7 @@ local function run(event)
 
   -- 4. TRIMS (Y: 37)
   -- TS (Steering Trim) - Right, TT (Throttle Trim) - Left
+  -- Trims return values from -128 to 128, multiply by 8 to scale for displaying.
   local trimST = (getTrimValue(1) or 0) * 8
   local trimTH = (getTrimValue(2) or 0) * 8
 
