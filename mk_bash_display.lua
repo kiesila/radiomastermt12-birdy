@@ -3,6 +3,7 @@
 -- EZRUN 3665 G3 3200kv Motor (38020344)
 -- HOBBYWING Telemetry Adapter (30850503)
 
+-- --- CONSTANTS ---
 local SENSOR_TEMP = "Tmp1"
 local SENSOR_VOLT = "VFAS"
 local CELLS = 3 -- 3S LiPo config
@@ -18,10 +19,25 @@ local lipoCurve = {
   { v = 3.20, pct = 0.00 }
 }
 
+-- Cached telemetry source names to avoid expensive lookups in the render loop
+local cachedRssiName = nil
+
+-- --- HELPER FUNCTIONS ---
+
 local function clamp(v, lo, hi)
   if v < lo then return lo end
   if v > hi then return hi end
   return v
+end
+
+-- Scale raw radio input (-1024 to 1024) to a percentage (0 to 100)
+local function scaleRawToPct(raw)
+  return clamp((raw + 1024) / 20.48, 0, 100)
+end
+
+-- Scale trim value (-128 to 128) to raw equivalent range (-1024 to 1024)
+local function scaleTrimToRaw(trim)
+  return trim * 8
 end
 
 local function pickSource(candidates)
@@ -34,6 +50,15 @@ local function pickSource(candidates)
   return nil
 end
 
+-- Triangle pointing down at the bar (for limit markers)
+local function drawLimiterTriangle(tx, ty)
+  lcd.drawFilledRectangle(tx - 2, ty - 3, 5, 1)
+  lcd.drawFilledRectangle(tx - 1, ty - 2, 3, 1)
+  lcd.drawFilledRectangle(tx, ty - 1, 1, 1)
+end
+
+-- --- RENDERING COMPONENT HELPERS ---
+
 ---@param limitPct number|nil
 local function drawCenterBar(x, y, w, h, val, limitPct)
   local cx = x + (w / 2)
@@ -44,7 +69,16 @@ local function drawCenterBar(x, y, w, h, val, limitPct)
 
   -- Calculate fill (val is expected to be -1024 to 1024)
   local fillW = math.floor((math.abs(val) / 1024) * (w / 2))
-  fillW = clamp(fillW, 0, math.floor(w / 2))
+  local maxFill = math.floor(w / 2)
+
+  local limOffset = nil
+  if limitPct ~= nil then
+    limOffset = math.floor((limitPct / 100) * (w / 2))
+    limOffset = clamp(limOffset, 0, maxFill)
+    maxFill = limOffset
+  end
+
+  fillW = clamp(fillW, 0, maxFill)
 
   if val > 0 then
     lcd.drawFilledRectangle(cx, y, fillW, h)
@@ -53,17 +87,9 @@ local function drawCenterBar(x, y, w, h, val, limitPct)
   end
 
   -- Draw limit markers if a limit percentage is provided
-  if limitPct ~= nil then
-    local limOffset = math.floor((limitPct / 100) * (w / 2))
-    limOffset = clamp(limOffset, 0, math.floor(w / 2))
-    -- Triangle pointing down at the box
-    local function drawTri(tx, ty)
-      lcd.drawFilledRectangle(tx - 2, ty - 3, 5, 1)
-      lcd.drawFilledRectangle(tx - 1, ty - 2, 3, 1)
-      lcd.drawFilledRectangle(tx, ty - 1, 1, 1)
-    end
-    drawTri(cx - limOffset, y)
-    drawTri(cx + limOffset, y)
+  if limOffset ~= nil then
+    drawLimiterTriangle(cx - limOffset, y)
+    drawLimiterTriangle(cx + limOffset, y)
   end
 end
 
@@ -104,15 +130,29 @@ local function drawBattery(x, y, w, h, voltage)
   end
 end
 
+-- --- MAIN RENDER LOOP ---
+
 local function run(event)
   lcd.clear()
+
   -- 1. HEADER (Y: 0, H: 7)
   local info = model.getInfo()
   local modelName = string.sub(info.name, 1, 10)
 
-  local rssiName = pickSource({ "RSSI", "1RSS", "2RSS", "RQly", "RFMD", "TRSS" })
-  local rssi = rssiName and (getValue(rssiName) or 0) or 0
-  if type(rssi) == "number" then rssi = math.floor(rssi + 0.5) else rssi = 0 end
+  -- Resolve telemetry RSSI sensor (lazy-cached once)
+  if cachedRssiName == nil then
+    cachedRssiName = pickSource({ "RSSI", "1RSS", "2RSS", "RQly", "RFMD", "TRSS" }) or ""
+  end
+
+  local rssi = 0
+  if cachedRssiName ~= "" then
+    rssi = getValue(cachedRssiName) or 0
+  end
+  if type(rssi) == "number" then
+    rssi = math.floor(rssi + 0.5)
+  else
+    rssi = 0
+  end
 
   local txVolts = getValue("tx-voltage") or 0
 
@@ -129,7 +169,7 @@ local function run(event)
   -- 2. STEERING BAR (Y: 13)
   local steeringVal = getValue("ch1") or 0
   local s2Raw = getValue("s2") or 0
-  local s2Pct = (s2Raw + 1024) / 20.48
+  local s2Pct = scaleRawToPct(s2Raw)
 
   lcd.drawText(5, 13, "STR", SMLSIZE)
   drawCenterBar(30, 14, 75, 6, steeringVal, s2Pct)
@@ -138,7 +178,7 @@ local function run(event)
   -- 3. THROTTLE BAR (Y: 25)
   local throttleVal = getValue("ch2") or 0
   local s1Raw = getValue("s1") or 0
-  local s1Pct = (s1Raw + 1024) / 20.48
+  local s1Pct = scaleRawToPct(s1Raw)
 
   lcd.drawText(5, 25, "THR", SMLSIZE)
   drawCenterBar(30, 26, 75, 6, throttleVal, s1Pct)
@@ -146,9 +186,9 @@ local function run(event)
 
   -- 4. TRIMS (Y: 37)
   -- TS (Steering Trim) - Right, TT (Throttle Trim) - Left
-  -- Trims return values from -128 to 128, multiply by 8 to scale for displaying.
-  local trimST = (getTrimValue(1) or 0) * 8
-  local trimTH = (getTrimValue(2) or 0) * 8
+  -- Trims return values from -128 to 128, scale for raw equivalent display (-1024 to 1024).
+  local trimST = scaleTrimToRaw(getTrimValue(1) or 0)
+  local trimTH = scaleTrimToRaw(getTrimValue(2) or 0)
 
   lcd.drawText(5, 37, "TT", SMLSIZE)
   drawCenterBar(15, 38, 40, 4, trimTH, nil)
