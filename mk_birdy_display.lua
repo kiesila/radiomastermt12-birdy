@@ -35,11 +35,6 @@ local function scaleRawToPct(raw)
   return clamp((raw + 1024) / 20.48, 0, 100)
 end
 
--- Scale trim value (-128 to 128) to raw equivalent range (-1024 to 1024)
-local function scaleTrimToRaw(trim)
-  return trim * 8
-end
-
 local function pickSource(candidates)
   for i = 1, #candidates do
     local name = candidates[i]
@@ -187,8 +182,8 @@ local function run(event)
   -- 4. TRIMS (Y: 37)
   -- TS (Steering Trim) - Right, TT (Throttle Trim) - Left
   -- Trims return values from -128 to 128, scale for raw equivalent display (-1024 to 1024).
-  local trimST = scaleTrimToRaw(getTrimValue(1) or 0)
-  local trimTH = scaleTrimToRaw(getTrimValue(2) or 0)
+  local trimST = getTrimValue(1) * 8 or 0
+  local trimTH = getTrimValue(2) * 8 or 0
 
   lcd.drawText(5, 37, "TT", SMLSIZE)
   drawCenterBar(15, 38, 40, 4, trimTH, nil)
