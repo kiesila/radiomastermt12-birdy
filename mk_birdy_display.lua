@@ -4,9 +4,9 @@
 -- HOBBYWING Telemetry Adapter (30850503)
 
 -- --- CONSTANTS ---
-local SENSOR_TEMP = "Tmp1"
+local SENSOR_MOTOR_TEMP = "Tmp1"
 local SENSOR_ESC_TEMP = "EscT"
-local SENSOR_VOLT = "VFAS"
+local SENSOR_VOLT = "EscV"
 local CELLS = 3 -- 3S LiPo config
 
 -- LiPo discharge curve mapping (Voltage per cell -> Capacity %)
@@ -221,7 +221,7 @@ local function run(event)
   local trimST = getTrimValue(1) * 8 or 0
   local trimTH = getTrimValue(2) * 8 or 0
 
-  local motorTemp = getValue(SENSOR_TEMP) or 0
+  local motorTemp = getValue(SENSOR_MOTOR_TEMP) or 0
   local escTemp = getValue(SENSOR_ESC_TEMP) or 0
   local mainVolts = getValue(SENSOR_VOLT) or 0
   local now = getTime()
