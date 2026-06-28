@@ -5,6 +5,7 @@
 
 -- --- CONSTANTS ---
 local SENSOR_TEMP = "Tmp1"
+local SENSOR_ESC_TEMP = "EscT"
 local SENSOR_VOLT = "VFAS"
 local CELLS = 3 -- 3S LiPo config
 
@@ -21,6 +22,13 @@ local lipoCurve = {
 
 -- Cached telemetry source names to avoid expensive lookups in the render loop
 local cachedRssiName = nil
+
+local voltHistory = {}
+local voltHistoryIdx = 1
+local lastVoltTime = 0
+local voltSum = 0
+local voltCount = 0
+local smoothedVoltage = 0
 
 -- --- HELPER FUNCTIONS ---
 
@@ -50,6 +58,13 @@ local function drawLimiterTriangle(tx, ty)
   lcd.drawFilledRectangle(tx - 2, ty - 3, 5, 1)
   lcd.drawFilledRectangle(tx - 1, ty - 2, 3, 1)
   lcd.drawFilledRectangle(tx, ty - 1, 1, 1)
+end
+
+-- Triangle pointing right at the vertical bar
+local function drawLimiterTriangleRight(tx, ty)
+  lcd.drawFilledRectangle(tx - 3, ty - 2, 1, 5)
+  lcd.drawFilledRectangle(tx - 2, ty - 1, 1, 3)
+  lcd.drawFilledRectangle(tx - 1, ty, 1, 1)
 end
 
 -- --- RENDERING COMPONENT HELPERS ---
@@ -85,6 +100,39 @@ local function drawCenterBar(x, y, w, h, val, limitPct)
   if limOffset ~= nil then
     drawLimiterTriangle(cx - limOffset, y)
     drawLimiterTriangle(cx + limOffset, y)
+  end
+end
+
+local function drawVerticalCenterBar(x, y, w, h, val, limitPct)
+  local cy = y + math.floor(h / 2)
+  -- Draw outer box
+  lcd.drawRectangle(x, y, w, h)
+  -- Center detent line
+  lcd.drawLine(x, cy, x + w - 1, cy, SOLID, 0)
+
+  -- Calculate fill (val is expected to be -1024 to 1024)
+  local fillH = math.floor((math.abs(val) / 1024) * (h / 2))
+  local maxFill = math.floor(h / 2)
+
+  local limOffset = nil
+  if limitPct ~= nil then
+    limOffset = math.floor((limitPct / 100) * (h / 2))
+    limOffset = clamp(limOffset, 0, maxFill)
+    maxFill = limOffset
+  end
+
+  fillH = clamp(fillH, 0, maxFill)
+
+  if val > 0 then
+    lcd.drawFilledRectangle(x, cy - fillH, w, fillH)
+  elseif val < 0 then
+    lcd.drawFilledRectangle(x, cy + 1, w, fillH)
+  end
+
+  -- Draw limit markers if a limit percentage is provided
+  if limOffset ~= nil then
+    drawLimiterTriangleRight(x, cy - limOffset)
+    drawLimiterTriangleRight(x, cy + limOffset)
   end
 end
 
@@ -161,46 +209,79 @@ local function run(event)
   end
   lcd.drawText(127, 0, rightText, SMLSIZE + INVERS + RIGHT)
 
-  -- 2. STEERING BAR (Y: 13)
+  -- Read inputs
   local steeringVal = getValue("ch1") or 0
   local s2Raw = getValue("s2") or 0
   local s2Pct = scaleRawToPct(s2Raw)
 
-  lcd.drawText(5, 13, "STR", SMLSIZE)
-  drawCenterBar(30, 14, 75, 6, steeringVal, s2Pct)
-  lcd.drawText(127, 13, math.floor(s2Pct) .. "%", SMLSIZE + RIGHT)
-
-  -- 3. THROTTLE BAR (Y: 25)
   local throttleVal = getValue("ch2") or 0
   local s1Raw = getValue("s1") or 0
   local s1Pct = scaleRawToPct(s1Raw)
 
-  lcd.drawText(5, 25, "THR", SMLSIZE)
-  drawCenterBar(30, 26, 75, 6, throttleVal, s1Pct)
-  lcd.drawText(127, 25, math.floor(s1Pct) .. "%", SMLSIZE + RIGHT)
-
-  -- 4. TRIMS (Y: 37)
-  -- TS (Steering Trim) - Right, TT (Throttle Trim) - Left
-  -- Trims return values from -128 to 128, scale for raw equivalent display (-1024 to 1024).
   local trimST = getTrimValue(1) * 8 or 0
   local trimTH = getTrimValue(2) * 8 or 0
 
-  lcd.drawText(5, 37, "TT", SMLSIZE)
-  drawCenterBar(15, 38, 40, 4, trimTH, nil)
-
-  lcd.drawText(67, 37, "TS", SMLSIZE)
-  drawCenterBar(77, 38, 40, 4, trimST, nil)
-
-  -- 5. FOOTER (Separator line at Y: 46)
-  lcd.drawLine(0, 46, 127, 46, SOLID, 0)
-
-  -- Motor Temp (Left)
   local motorTemp = getValue(SENSOR_TEMP) or 0
-  lcd.drawText(5, 50, math.floor(motorTemp) .. "@C", 0)
-
-  -- Battery (Right)
+  local escTemp = getValue(SENSOR_ESC_TEMP) or 0
   local mainVolts = getValue(SENSOR_VOLT) or 0
-  drawBattery(92, 50, 29, 10, mainVolts)
+  local now = getTime()
+  if mainVolts > 0 then
+    if now - lastVoltTime >= 10 then
+      lastVoltTime = now
+
+      if voltCount < 20 then
+        voltCount = voltCount + 1
+      else
+        voltSum = voltSum - voltHistory[voltHistoryIdx]
+      end
+
+      voltHistory[voltHistoryIdx] = mainVolts
+      voltSum = voltSum + mainVolts
+
+      voltHistoryIdx = voltHistoryIdx + 1
+      if voltHistoryIdx > 20 then
+        voltHistoryIdx = 1
+      end
+
+      smoothedVoltage = voltSum / voltCount
+    end
+  else
+    smoothedVoltage = 0
+    voltCount = 0
+    voltSum = 0
+    voltHistoryIdx = 1
+  end
+
+  -- 2. STEERING BAR
+  drawCenterBar(4, 11, 94, 6, steeringVal, s2Pct)
+  lcd.drawText(102, 10, math.floor(s2Pct) .. "%", SMLSIZE)
+
+  -- Separators
+  lcd.drawLine(0, 18, 127, 18, SOLID, 0)
+  lcd.drawLine(48, 18, 48, 54, SOLID, 0)
+
+  -- 3. THROTTLE BAR (Left Pane)
+  lcd.drawText(46, 20, math.floor(s1Pct) .. "%", SMLSIZE + RIGHT)
+  drawVerticalCenterBar(10, 21, 12, 31, throttleVal, s1Pct)
+
+  -- 4. TEMP & BATTERY (Right Pane)
+  lcd.drawText(52, 21, "Motor", SMLSIZE)
+  lcd.drawText(84, 19, math.floor(motorTemp) .. "@C", 0)
+
+  lcd.drawText(52, 31, "ESC", SMLSIZE)
+  lcd.drawText(84, 29, math.floor(escTemp) .. "@C", 0)
+
+  drawBattery(90, 40, 29, 10, smoothedVoltage)
+  lcd.drawText(86, 42, string.format("%.1fV", smoothedVoltage), SMLSIZE + RIGHT)
+
+  -- 5. FOOTER (Trims)
+  lcd.drawLine(0, 54, 127, 54, SOLID, 0)
+
+  lcd.drawText(2, 56, "TT", SMLSIZE)
+  drawCenterBar(15, 57, 40, 4, trimTH, nil)
+
+  lcd.drawText(65, 56, "TS", SMLSIZE)
+  drawCenterBar(78, 57, 40, 4, trimST, nil)
 
   return 0
 end
