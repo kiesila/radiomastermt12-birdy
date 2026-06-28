@@ -223,33 +223,24 @@ local function run(event)
 
   local motorTemp = getValue(SENSOR_MOTOR_TEMP) or 0
   local escTemp = getValue(SENSOR_ESC_TEMP) or 0
+
+  -- Battery voltage processing
+  -- Exponential Moving Average (EMA) to smooth out voltage fluctuations
   local mainVolts = getValue(SENSOR_VOLT) or 0
   local now = getTime()
+  local smoothedVoltage = 0
+  local filterFactor = 0.05 -- Range 0.0 to 1.0. Lower = smoother/slower.
+
   if mainVolts > 0 then
-    if now - lastVoltTime >= 10 then
-      lastVoltTime = now
-
-      if voltCount < 20 then
-        voltCount = voltCount + 1
-      else
-        voltSum = voltSum - voltHistory[voltHistoryIdx]
-      end
-
-      voltHistory[voltHistoryIdx] = mainVolts
-      voltSum = voltSum + mainVolts
-
-      voltHistoryIdx = voltHistoryIdx + 1
-      if voltHistoryIdx > 20 then
-        voltHistoryIdx = 1
-      end
-
-      smoothedVoltage = voltSum / voltCount
+    if smoothedVoltage == 0 then
+      -- Snap to the first valid reading instantly so you don't slowly climb from 0
+      smoothedVoltage = mainVolts
+    else
+      -- The EMA formula: add a small percentage of the difference between the new and old value
+      smoothedVoltage = smoothedVoltage + filterFactor * (mainVolts - smoothedVoltage)
     end
   else
     smoothedVoltage = 0
-    voltCount = 0
-    voltSum = 0
-    voltHistoryIdx = 1
   end
 
   -- 2. STEERING BAR
