@@ -37,8 +37,6 @@ local function clamp(v, lo, hi)
   return v
 end
 
-
-
 local function pickSource(candidates)
   for i = 1, #candidates do
     local name = candidates[i]
@@ -48,8 +46,6 @@ local function pickSource(candidates)
   end
   return nil
 end
-
-
 
 -- --- RENDERING COMPONENT HELPERS ---
 
