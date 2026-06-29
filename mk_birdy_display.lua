@@ -38,10 +38,7 @@ local function clamp(v, lo, hi)
   return v
 end
 
--- Scale raw radio input (-1024 to 1024) to a percentage (0 to 100)
-local function scaleRawToPct(raw)
-  return clamp((raw + 1024) / 20.48, 0, 100)
-end
+
 
 local function pickSource(candidates)
   for i = 1, #candidates do
@@ -53,41 +50,21 @@ local function pickSource(candidates)
   return nil
 end
 
--- Triangle pointing down at the bar (for limit markers)
-local function drawLimiterTriangle(tx, ty)
-  lcd.drawFilledRectangle(tx - 2, ty - 3, 5, 1)
-  lcd.drawFilledRectangle(tx - 1, ty - 2, 3, 1)
-  lcd.drawFilledRectangle(tx, ty - 1, 1, 1)
-end
 
--- Triangle pointing right at the vertical bar
-local function drawLimiterTriangleRight(tx, ty)
-  lcd.drawFilledRectangle(tx - 3, ty - 2, 1, 5)
-  lcd.drawFilledRectangle(tx - 2, ty - 1, 1, 3)
-  lcd.drawFilledRectangle(tx - 1, ty, 1, 1)
-end
 
 -- --- RENDERING COMPONENT HELPERS ---
 
----@param limitPct number|nil
-local function drawCenterBar(x, y, w, h, val, limitPct)
-  local cx = x + (w / 2)
+---@param markerRaw number|nil
+local function drawCenterBar(x, y, w, h, val, markerRaw)
+  local cx = x + math.floor(w / 2)
   -- Draw outer box
   lcd.drawRectangle(x, y, w, h)
   -- Center detent line
   lcd.drawLine(cx, y, cx, y + h - 1, SOLID, 0)
 
   -- Calculate fill (val is expected to be -1024 to 1024)
-  local fillW = math.floor((math.abs(val) / 1024) * (w / 2))
   local maxFill = math.floor(w / 2)
-
-  local limOffset = nil
-  if limitPct ~= nil then
-    limOffset = math.floor((limitPct / 100) * (w / 2))
-    limOffset = clamp(limOffset, 0, maxFill)
-    maxFill = limOffset
-  end
-
+  local fillW = math.floor((math.abs(val) / 1024) * maxFill)
   fillW = clamp(fillW, 0, maxFill)
 
   if val > 0 then
@@ -96,14 +73,24 @@ local function drawCenterBar(x, y, w, h, val, limitPct)
     lcd.drawFilledRectangle(cx - fillW, y, fillW, h)
   end
 
-  -- Draw limit markers if a limit percentage is provided
-  if limOffset ~= nil then
-    drawLimiterTriangle(cx - limOffset, y)
-    drawLimiterTriangle(cx + limOffset, y)
+  -- Draw potentiometer bar if a raw value is provided
+  -- 2 pixels high, with a 1-pixel gap above the box (occupies y-3 and y-2)
+  if markerRaw ~= nil then
+    local potW = math.floor((math.abs(markerRaw) / 1024) * maxFill)
+    potW = clamp(potW, 0, maxFill)
+    local py = y - 3
+    if markerRaw > 0 then
+      lcd.drawFilledRectangle(cx, py, potW + 1, 2)
+    elseif markerRaw < 0 then
+      lcd.drawFilledRectangle(cx - potW, py, potW + 1, 2)
+    else
+      lcd.drawFilledRectangle(cx, py, 1, 2)
+    end
   end
 end
 
-local function drawVerticalCenterBar(x, y, w, h, val, limitPct)
+---@param markerRaw number|nil
+local function drawVerticalCenterBar(x, y, w, h, val, markerRaw)
   local cy = y + math.floor(h / 2)
   -- Draw outer box
   lcd.drawRectangle(x, y, w, h)
@@ -111,16 +98,8 @@ local function drawVerticalCenterBar(x, y, w, h, val, limitPct)
   lcd.drawLine(x, cy, x + w - 1, cy, SOLID, 0)
 
   -- Calculate fill (val is expected to be -1024 to 1024)
-  local fillH = math.floor((math.abs(val) / 1024) * (h / 2))
   local maxFill = math.floor(h / 2)
-
-  local limOffset = nil
-  if limitPct ~= nil then
-    limOffset = math.floor((limitPct / 100) * (h / 2))
-    limOffset = clamp(limOffset, 0, maxFill)
-    maxFill = limOffset
-  end
-
+  local fillH = math.floor((math.abs(val) / 1024) * maxFill)
   fillH = clamp(fillH, 0, maxFill)
 
   if val > 0 then
@@ -129,10 +108,19 @@ local function drawVerticalCenterBar(x, y, w, h, val, limitPct)
     lcd.drawFilledRectangle(x, cy + 1, w, fillH)
   end
 
-  -- Draw limit markers if a limit percentage is provided
-  if limOffset ~= nil then
-    drawLimiterTriangleRight(x, cy - limOffset)
-    drawLimiterTriangleRight(x, cy + limOffset)
+  -- Draw potentiometer bar if a raw value is provided
+  -- 2 pixels wide, with a 1-pixel gap left of the box (occupies x-3 and x-2)
+  if markerRaw ~= nil then
+    local potH = math.floor((math.abs(markerRaw) / 1024) * maxFill)
+    potH = clamp(potH, 0, maxFill)
+    local px = x - 3
+    if markerRaw > 0 then
+      lcd.drawFilledRectangle(px, cy - potH, 2, potH + 1)
+    elseif markerRaw < 0 then
+      lcd.drawFilledRectangle(px, cy, 2, potH + 1)
+    else
+      lcd.drawFilledRectangle(px, cy, 2, 1)
+    end
   end
 end
 
@@ -212,11 +200,9 @@ local function run(event)
   -- Read inputs
   local steeringVal = getValue("ch1") or 0
   local s2Raw = getValue("s2") or 0
-  local s2Pct = scaleRawToPct(s2Raw)
 
   local throttleVal = getValue("ch2") or 0
   local s1Raw = getValue("s1") or 0
-  local s1Pct = scaleRawToPct(s1Raw)
 
   local trimST = getTrimValue(1) * 8 or 0
   local trimTH = getTrimValue(2) * 8 or 0
@@ -244,23 +230,21 @@ local function run(event)
   end
 
   -- 2. STEERING BAR
-  drawCenterBar(4, 11, 94, 6, steeringVal, s2Pct)
-  lcd.drawText(102, 10, math.floor(s2Pct) .. "%", SMLSIZE)
+  drawCenterBar(4, 11, 120, 6, steeringVal, s2Raw)
 
   -- Separators
   lcd.drawLine(0, 18, 127, 18, SOLID, 0)
   lcd.drawLine(48, 18, 48, 54, SOLID, 0)
 
   -- 3. THROTTLE BAR (Left Pane)
-  lcd.drawText(46, 20, math.floor(s1Pct) .. "%", SMLSIZE + RIGHT)
-  drawVerticalCenterBar(10, 21, 12, 31, throttleVal, s1Pct)
+  drawVerticalCenterBar(10, 21, 12, 31, throttleVal, s1Raw)
 
   -- 4. TEMP & BATTERY (Right Pane)
-  lcd.drawText(52, 21, "Motor", SMLSIZE)
-  lcd.drawText(84, 19, math.floor(motorTemp) .. "@C", 0)
+  lcd.drawText(52, 22, "Motor", SMLSIZE)
+  lcd.drawText(84, 20, math.floor(motorTemp) .. "@C", 0)
 
-  lcd.drawText(52, 31, "ESC", SMLSIZE)
-  lcd.drawText(84, 29, math.floor(escTemp) .. "@C", 0)
+  lcd.drawText(52, 32, "ESC", SMLSIZE)
+  lcd.drawText(84, 30, math.floor(escTemp) .. "@C", 0)
 
   drawBattery(90, 40, 29, 10, smoothedVoltage)
   lcd.drawText(86, 42, string.format("%.1fV", smoothedVoltage), SMLSIZE + RIGHT)
