@@ -1,12 +1,11 @@
--- MT12 Telemetry Dashboard for Rival MT10 running:
--- EZRUN MAX10 G2 (140A) ESC (30102603)
--- EZRUN 3665 G3 3200kv Motor (38020344)
--- HOBBYWING Telemetry Adapter (30850503)
+-- Copyright (c) 2026 Mikko Kiesilä
+-- This software is released under the MIT License.
+-- https://opensource.org/licenses/MIT
 
 -- --- CONSTANTS ---
 local SENSOR_MOTOR_TEMP = "Tmp1"
 local SENSOR_ESC_TEMP = "EscT"
-local SENSOR_VOLT = "EscV"
+local SENSOR_MAIN_BAT_VOLT = "EscV"
 local CELLS = 3 -- 3S LiPo config
 
 -- LiPo discharge curve mapping (Voltage per cell -> Capacity %)
@@ -212,7 +211,7 @@ local function run(event)
 
   -- Battery voltage processing
   -- Exponential Moving Average (EMA) to smooth out voltage fluctuations
-  local mainVolts = getValue(SENSOR_VOLT) or 0
+  local mainVolts = getValue(SENSOR_MAIN_BAT_VOLT) or 0
   local now = getTime()
   local smoothedVoltage = 0
   local filterFactor = 0.05 -- Range 0.0 to 1.0. Lower = smoother/slower.
