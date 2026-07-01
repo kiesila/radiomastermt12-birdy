@@ -26,7 +26,7 @@ It provides real-time visual telemetry, signal quality indicators, battery statu
 
 ## 🛠️ Hardware Requirements & Setup
 
-This script is configured specifically for the following setup that I have ended up:
+This script is configured specifically for the following setup that I have ended up with:
 
 - **Transmitter**: [RadioMaster MT12](https://www.radiomasterrc.com/products/mt12-surface-radio-controller) running EdgeTX (or compatible OpenTX).
 - **ESC**: Hobbywing EZRUN MAX10 G2 (140A) (Part No: 30102603).
