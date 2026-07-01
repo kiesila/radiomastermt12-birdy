@@ -46,13 +46,7 @@ You might need to change the following sensor names. See what you have registere
 
 ## 🚀 Installation & Usage
 
-1. **Copy the Script**: Transfer the `mk_birdy_display.lua` file to your RadioMaster MT12's SD Card in the `/SCRIPTS/TELEMETRY/` directory:
-   ```bash
-   SD Card/
-   └── SCRIPTS/
-       └── TELEMETRY/
-           └── mk_birdy_display.lua
-   ```
+1. **Copy the Script**: Transfer the `mk_birdy_display.lua` file to your RadioMaster MT12's SD Card in the `/SCRIPTS/TELEMETRY/` directory.
 2. **Assign Telemetry Screen**:
    - On the MT12, press and hold the **SYS** or **MDL** button (depending on firmware version) to access the **Model Settings**.
    - Navigate to the **Telemetry** screen settings.
