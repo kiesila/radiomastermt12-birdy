@@ -33,8 +33,8 @@ This script is configured specifically for the following setup that I have ended
 - **Motor**: Hobbywing EZRUN 3665 G3 (3200kv) (Part No: 38020344).
 - **Telemetry Link**: Hobbywing Telemetry Adapter (Part No: 30850503)
 - **Receiver**: FrSky Archer Plus R6
-- **Extra temp sensor** FrSky Temperature Sensor TEMS-01
-- **Telemetry adapter for the TEMS-01** SPortBUS Dual Temperature Telemetry Sensor for FrSky FBUS & S.Port
+- **Extra temp sensor**: FrSky Temperature Sensor TEMS-01
+- **Telemetry adapter for the TEMS-01**: SPortBUS Dual Temperature Telemetry Sensor for FrSky FBUS & S.Port
 
 ### Telemetry Sensor Configurations
 
