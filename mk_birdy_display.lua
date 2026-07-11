@@ -186,6 +186,11 @@ local function run(event)
   lcd.drawFilledRectangle(0, 0, 128, 7)
   lcd.drawText(0, 0, modelName, SMLSIZE + INVERS)
 
+  local _, driveMode = getFlightMode()
+  if driveMode then
+    lcd.drawText(64, 0, driveMode, SMLSIZE + INVERS + CENTER)
+  end
+
   local rightText = "R:" .. rssi
   if txVolts > 0 then
     rightText = rightText .. string.format(" %.1fV", txVolts)

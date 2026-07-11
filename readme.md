@@ -23,6 +23,7 @@ It provides real-time visual telemetry, signal quality indicators, battery statu
 - **Core Signal & Transmitter Stats**:
   - Automatically resolves signal strength/quality sensor (e.g., RSSI, 1RSS, RQly, etc.) and displays it on the header.
   - Monitors and displays transmitter voltage (tx-voltage) and the active model name.
+  - Displays the active **Drive Mode** (e.g., `HighEx`, `MidEx`, or `Full`, configured as flight modes and controlled via the `SA` switch) in the dead center of the header bar.
 
 ## 🛠️ Hardware Requirements & Setup
 
